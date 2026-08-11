@@ -1,0 +1,129 @@
+{
+  "strong_signal": {
+    "selected": {
+      "mean": 0.9815121083664535,
+      "std": 0.009535287607868486,
+      "ci_lower": 0.9796131863087951,
+      "ci_upper": 0.983303357781632,
+      "n_seeds": 20,
+      "n_splits": 5
+    },
+    "random": {
+      "mean": 0.5991142768927347,
+      "std": 0.1620487478181039,
+      "ci_lower": 0.5690457022309072,
+      "ci_upper": 0.6306096747210578,
+      "n_seeds": 20,
+      "n_splits": 5
+    },
+    "ci_threshold_check": {
+      "passed": true,
+      "mean": 0.9815121083664535,
+      "ci_lower": 0.9796131863087951,
+      "ci_upper": 0.983303357781632,
+      "margin_in_stds": 24.279509741836264
+    },
+    "selected_vs_random_wilcoxon": {
+      "statistic": 0.0,
+      "p_value": 3.896120241954008e-18,
+      "n_pairs": 100,
+      "median_diff": 0.4454887218045112
+    },
+    "PASS": true
+  },
+  "pure_noise": {
+    "summary": {
+      "mean": 0.49660828642901805,
+      "std": 0.06626201513278193,
+      "ci_lower": 0.48355811688946215,
+      "ci_upper": 0.5096501526344591,
+      "n_seeds": 20,
+      "n_splits": 5
+    },
+    "ci_covers_0.5": true,
+    "PASS": true
+  },
+  "leakage_detection": {
+    "proper_mean_auc": 0.49660828642901805,
+    "leaky_mean_auc": 0.773121787054409,
+    "wilcoxon": {
+      "statistic": 0.0,
+      "p_value": 3.895900458013434e-18,
+      "n_pairs": 100,
+      "median_diff": 0.27687499999999987
+    },
+    "PASS": true
+  },
+  "labeling": {
+    "all_passed": true,
+    "cases": [
+      {
+        "prediction": "The answer is Paris.",
+        "references": [
+          "Paris"
+        ],
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "prediction": "I believe it was New York City.",
+        "references": [
+          "New York"
+        ],
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "prediction": "The capital is Berlin.",
+        "references": [
+          "Paris"
+        ],
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "prediction": "42",
+        "references": [
+          "42"
+        ],
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "prediction": "The result is forty-two.",
+        "references": [
+          "42"
+        ],
+        "expected": false,
+        "actual": false,
+        "passed": true
+      },
+      {
+        "prediction": "Marie Curie",
+        "references": [
+          "Marie Curie",
+          "Curie"
+        ],
+        "expected": true,
+        "actual": true,
+        "passed": true
+      },
+      {
+        "prediction": "",
+        "references": [
+          "something"
+        ],
+        "expected": false,
+        "actual": false,
+        "passed": true
+      }
+    ],
+    "PASS": true
+  },
+  "overall_PASS": true,
+  "elapsed_seconds": 17.152645111083984
+}

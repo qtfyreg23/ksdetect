@@ -1,0 +1,23 @@
+# exp_01_data_check — verifies core.data loaders against the REAL datasets
+# on the server, before any GPU extraction is built on top of them.
+# No GPU / model needed. Needs network access to huggingface.co (the server
+# has this; the sandbox this code was written in does not, so none of
+# core/data/loaders.py has actually been executed yet).
+
+experiment_name: "exp_01_data_check"
+description: >
+  Loads a small number of examples (n_check_per_dataset) from each of the 5
+  datasets used in LAFaCT's Appendix C, validates the unified schema
+  (example_id/question/references/task_type/dataset) is well-formed for
+  every example, prints a sample from each, and reports total available
+  dataset sizes (so we know upfront which datasets will be capped below the
+  2000-example coarse-scan target, e.g. TruthfulQA only has 817 total).
+  Also runs core.labeling.gsm8k_is_correct against 3 real GSM8K examples as
+  a sanity check.
+  PREREQUISITE: run `python scripts/download_datasets.py` first — this
+  script reads from local disk only and does not touch the network.
+
+n_check_per_dataset: 10
+datasets: ["truthfulqa", "triviaqa", "coqa", "medquad", "gsm8k"]
+
+output_dir: "experiments/exp_01_data_check/results"

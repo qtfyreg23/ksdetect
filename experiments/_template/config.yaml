@@ -1,0 +1,47 @@
+# Template config.yaml — copy this whole experiments/_template/ directory to
+# experiments/exp_YYYYMMDD_short_name/ and fill in every field below.
+# Do NOT leave a field at its template default silently — every field here
+# should be a deliberate choice for the new experiment (project plan §2.1).
+
+experiment_name: "REPLACE_ME_exp_YYYYMMDD_short_name"
+
+# One or two sentences: what question is this experiment trying to answer,
+# and which stage of the project plan (0-6) does it belong to? This is
+# read by a human before anything else — do not leave it generic.
+description: "REPLACE_ME"
+
+# --- Model ---
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+
+# --- Data ---
+dataset: "REPLACE_ME"          # e.g. hotpot_qa, trivia_qa, gsm8k, coqa
+split: "validation"
+n_examples: null                 # null = use all available; set an int for
+                                  # a quick small-scale check first (project
+                                  # plan §2.2)
+stage: "pregen"                  # "pregen" | "posthoc"
+
+# --- Extraction ---
+modules: ["ffn_module", "ffn_neuron", "attention", "residual"]
+layers: null                     # null = all layers; or an explicit list,
+                                  # e.g. [4, 8, 12, ...] for a coarse scan
+pooling: "last"                  # "last" | "mean"
+batch_size: 8
+
+# --- Labeling ---
+label_type: "hard"               # "hard" | "soft"
+n_samples_for_soft_label: 10     # only used if label_type == "soft"
+sampling_temperature: 0.7        # only used if label_type == "soft"
+
+# --- Stats (core.stats) ---
+k_values: [32, 64, 128, 256, null]   # null == full representation
+selection_method: "l1"               # "l1" | "variance" | "magnitude" | "random"
+n_splits: 5
+n_seeds: 10
+base_seed: 0
+
+# --- Output ---
+output_dir: "experiments/REPLACE_ME/results"
+random_state: 0

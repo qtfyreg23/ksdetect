@@ -1,0 +1,28 @@
+# Data / large artifacts — never commit these
+data/
+*.npy
+*.npz
+*.parquet
+*.pt
+*.bin
+*.safetensors
+
+# Logs and results (keep configs, ignore bulky outputs by default;
+# remove specific lines here if you deliberately want to version a
+# particular results/ folder, e.g. exp_00_sanity_check's small figures)
+experiments/*/results/*.npy
+experiments/*/run_log*.txt
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.egg-info/
+
+# Conda / env
+.conda/
+
+# OS / editor
+.DS_Store
+.idea/
+*.swp

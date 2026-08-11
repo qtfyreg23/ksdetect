@@ -1,0 +1,43 @@
+# exp_00_sanity_check — validates core/stats, core/labeling, and (on the
+# server) core/extraction BEFORE any real scan begins. This is the concrete
+# implementation of project plan §4.7 ("退出标准").
+#
+# This experiment has two independent parts, run separately:
+#   1. run_stats_sanity_check.py — pure numpy/sklearn synthetic-data test,
+#      no GPU/model needed. Can run anywhere, including off-server.
+#   2. run_extraction_smoke_test.py — needs the real model on the AutoDL
+#      server. Run this FIRST on the server, on a tiny n_examples, before
+#      any large-scale extraction job.
+
+experiment_name: "exp_00_sanity_check"
+description: >
+  Stage-0 exit-criteria check. Part 1 (stats) verifies core.stats produces
+  ~0.5 AUC with CI covering 0.5 on pure-noise features, high AUC on a
+  constructed strong-signal feature, and that the deliberately-leaky
+  selection path produces an inflated AUC that the leakage-safe path does
+  NOT reproduce (regression test for docs/known_issues.md #3). Part 2
+  (extraction) verifies the model loads from MODEL_PATH, hooks fire on all
+  four module types, and shapes match expectations, on 3 example prompts.
+
+# --- Part 1 synthetic-data parameters ---
+n_samples: 400
+n_noise_features: 500
+n_informative_features: 8
+informative_signal_strength: 1.2   # effect size of informative features
+n_splits: 5
+n_seeds: 20
+base_seed: 0
+k_values: [8, 32, 128]
+selection_method: "l1"
+random_state: 0
+
+# --- Part 2 (server-only) parameters ---
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+smoke_test_prompts:
+  - "The capital of France is"
+  - "Question: What is 2 + 2?\nAnswer:"
+  - "The chemical symbol for gold is"
+
+output_dir: "experiments/exp_00_sanity_check/results"

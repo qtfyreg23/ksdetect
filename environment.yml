@@ -1,0 +1,45 @@
+name: ksdetect
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10.14
+  - pip=24.0
+  - pip:
+      # --- Deep learning stack (CUDA 12.1 build, matches common AutoDL images) ---
+      - torch==2.4.1
+      - torchvision==0.19.1
+      - torchaudio==2.4.1
+      # If the AutoDL instance's CUDA driver version differs, reinstall torch with the
+      # matching wheel from https://pytorch.org/get-started/previous-versions/ instead
+      # of editing this file's version pins blindly — see README.md Section 1.
+
+      # --- HF ecosystem ---
+      - transformers==4.44.2
+      - accelerate==0.34.2
+      - tokenizers==0.19.1
+      - safetensors==0.4.5
+      # datasets pinned BELOW 4.0.0 on purpose: v4.0 introduced a breaking change that
+      # broke hotpot_qa loading in the previous project iteration (see docs/known_issues.md #1)
+      - datasets==2.21.0
+      - huggingface_hub==0.24.6
+
+      # --- Scientific / stats stack (core/stats depends on these) ---
+      - numpy==1.26.4
+      - scipy==1.13.1
+      - scikit-learn==1.5.1
+      - pandas==2.2.2
+      - statsmodels==0.14.2
+      - pyarrow==17.0.0          # parquet storage for extracted activations
+
+      # --- Plotting (core/viz — publication-grade, English-only figures) ---
+      - matplotlib==3.9.2
+      - seaborn==0.13.2
+
+      # --- Utilities ---
+      - pyyaml==6.0.2
+      - tqdm==4.66.5
+      - jsonlines==4.0.0
+      - python-dotenv==1.0.1
