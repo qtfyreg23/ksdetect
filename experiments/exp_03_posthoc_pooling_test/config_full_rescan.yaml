@@ -1,0 +1,44 @@
+experiment_name: exp_03_posthoc_pooling_full_rescan
+description: Full 5-dataset generalization of the exp_03 discrimination test. The 2-dataset pilot (truthfulqa/medquad)
+  strongly supported explanation A (pooling artifact, not a real masking effect) — this run extends the
+  same answer_mean re-extraction + matched comparison to all 5 Stage-1 datasets, since the 'last token'
+  pooling issue is dataset-independent (it's a property of the chat template, not any one dataset's content)
+  and likely biased the ENTIRE Stage-1 posthoc column low, not just these two datasets. See docs/decisions.md
+  D18.
+model_path: /autodl-fs/data/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+datasets:
+- truthfulqa
+- triviaqa
+- coqa
+- medquad
+- gsm8k
+coarse_scan_output_dir: experiments/exp_02_coarse_scan/results
+coarse_scan_activation_dir: data/activations/exp_02_coarse_scan
+activation_dir: data/activations/exp_03_posthoc_pooling_full_rescan
+layers_coarse:
+- 0
+- 4
+- 8
+- 12
+- 16
+- 20
+- 24
+- 28
+- 31
+modules:
+- embedding
+- attention
+- ffn_module
+- ffn_neuron
+- residual
+batch_size: 1
+max_input_length: 2048
+progress_log_every_n_batches: 20
+resume: true
+output_dir: experiments/exp_03_posthoc_pooling_test/results_full_rescan
+n_splits: 5
+n_seeds: 10
+base_seed: 0
+significance_alpha: 0.05

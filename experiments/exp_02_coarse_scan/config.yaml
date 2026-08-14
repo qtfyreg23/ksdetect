@@ -1,0 +1,74 @@
+# exp_02_coarse_scan — Stage 1 wide scan, first (coarse) pass.
+# See project plan §5.2. Produces activation shards + labels only —
+# statistics/plotting happen in a SEPARATE script (exp_02b) that reads these
+# shards, so a stats bug never requires re-running GPU extraction.
+
+experiment_name: "exp_02_coarse_scan"
+description: >
+  Stage-1 coarse wide scan. For each of the 5 LAFaCT-aligned datasets, for
+  up to n_examples_per_dataset examples: generate 1 greedy completion (hard
+  label + posthoc text source) and n_samples_for_soft_label temperature
+  samples (soft label); extract activations at layers_coarse for all
+  SUPPORTED_MODULES, both pregen (prompt only) and posthoc (prompt +
+  greedy answer), pooling="last" for both (see docs/decisions.md D11 for
+  why "last" was used for posthoc too, as a coarse-pass simplification).
+  No conclusions are drawn here — this only produces the raw material for
+  exp_02b's analysis.
+
+# --- Model ---
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+
+# --- Data ---
+datasets: ["truthfulqa", "triviaqa", "coqa", "medquad", "gsm8k"]
+n_examples_per_dataset: 1000    # actual count is min(this, dataset size) —
+                                 # truthfulqa only has 817 total, so it will
+                                 # use all 817; this is logged explicitly,
+                                 # not silently truncated without notice.
+                                 # Reduced from 2000->1000 (2026-08-12) after
+                                 # the pilot run showed the original 2000
+                                 # would take ~17.3h at batch_size=1 (forced
+                                 # down from OOM) — see docs/decisions.md D14.
+
+# --- Extraction scope (coarse pass) ---
+# 9 layers out of 32, roughly every 4th layer plus the final layer —
+# project plan §5.2 "层深度稀疏采样(如每4层一次)".
+layers_coarse: [0, 4, 8, 12, 16, 20, 24, 28, 31]
+modules: ["embedding", "attention", "ffn_module", "ffn_neuron", "residual"]
+pooling_pregen: "last"
+pooling_posthoc: "last"
+
+# --- Generation ---
+# max_new_tokens defaults come from core.extraction.generate.DEFAULT_MAX_NEW_TOKENS
+# (mirrors LAFaCT Table 10); override per-dataset here only if a specific
+# dataset's generations look truncated during the pilot run.
+max_new_tokens_override: {}
+n_samples_for_soft_label: 10
+sampling_temperature: 0.7
+
+# --- Compute ---
+batch_size: 1                   # forced down from an original default of 4
+                                  # after the pilot run OOM'd on 24GB VRAM
+                                  # (effective generation batch = batch_size
+                                  # x n_samples_for_soft_label = 4x10 = 40
+                                  # sequences was too much); see
+                                  # docs/decisions.md D14. Do not raise this
+                                  # back up without watching nvidia-smi on a
+                                  # pilot run again.
+random_state: 0
+
+# --- Resume behavior ---
+resume: true                     # skip batches whose shard files already
+                                  # exist; if config has changed since the
+                                  # last run in the same output_dir, the
+                                  # run REFUSES to start rather than
+                                  # silently mixing old/new settings (see
+                                  # docs/decisions.md D13) — use a fresh
+                                  # output_dir for a deliberately different
+                                  # config.
+
+# --- Output ---
+output_dir: "experiments/exp_02_coarse_scan/results"
+activation_dir: "data/activations/exp_02_coarse_scan"
+progress_log_every_n_batches: 5

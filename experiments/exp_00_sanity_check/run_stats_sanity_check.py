@@ -42,7 +42,8 @@ from core.stats import (
     paired_wilcoxon,
 )
 from core.stats.nested_cv import cross_validated_auc, cross_validated_auc_LEAKY_FOR_TESTING_ONLY
-from core.labeling import is_correct
+from core.labeling import is_correct, gsm8k_is_correct
+from core.labeling.gsm8k_correctness import extract_first_number, extract_gsm8k_reference_number
 from core.viz import bar_with_errorbars, save_figure
 
 
@@ -101,6 +102,70 @@ def run_labeling_checks(logger) -> dict:
                      f"expected={expected} actual={actual} "
                      f"{'PASS' if passed else 'FAIL'}")
     return {"all_passed": all_passed, "cases": results}
+
+
+def run_gsm8k_numeric_checks(logger) -> dict:
+    """
+    Regression test for docs/known_issues.md #7: an earlier version of
+    extract_first_number's regex could match a bare comma in ordinary prose
+    (no digits at all) and then crash on float('') instead of returning
+    None. Every case here must NOT raise, and must match `expected`.
+    """
+    number_extraction_cases = [
+        # (text, expected_extracted_number_or_None)
+        ("The answer is 42.", 42.0),
+        ("She has 1,200 apples.", 1200.0),
+        ("Let me think, the answer is not immediately clear.", None),  # <- the exact bug case
+        ("First, second, third — no numbers here, just commas.", None),
+        ("-17 is the result.", -17.0),
+        ("#### 18", 18.0),
+        ("", None),
+        (",", None),
+        ("The value is 3.5 kg.", 3.5),
+    ]
+    results = []
+    all_passed = True
+    for text, expected in number_extraction_cases:
+        try:
+            actual = extract_first_number(text)
+            raised = False
+        except Exception as e:
+            actual = None
+            raised = True
+            logger.error(f"extract_first_number RAISED on {text!r}: {type(e).__name__}: {e}")
+
+        passed = (not raised) and (actual == expected)
+        all_passed = all_passed and passed
+        results.append({
+            "text": text, "expected": expected, "actual": actual,
+            "raised": raised, "passed": passed,
+        })
+        logger.info(f"extract_first_number check: text={text!r} "
+                     f"expected={expected} actual={actual} raised={raised} "
+                     f"{'PASS' if passed else 'FAIL'}")
+
+    # gsm8k_is_correct must return False (not raise) when the prediction has
+    # no extractable number, even though the reference is well-formed.
+    ref_field = "Some reasoning here. #### 18"
+    try:
+        no_number_pred_result = gsm8k_is_correct(
+            "Let me think, the answer is not immediately clear.", ref_field,
+        )
+        no_number_raised = False
+    except Exception as e:
+        no_number_pred_result = None
+        no_number_raised = True
+        logger.error(f"gsm8k_is_correct RAISED on a no-number prediction: "
+                       f"{type(e).__name__}: {e}")
+
+    no_number_check_passed = (not no_number_raised) and (no_number_pred_result is False)
+    logger.info(f"gsm8k_is_correct no-number-prediction check: "
+                 f"result={no_number_pred_result} raised={no_number_raised} "
+                 f"{'PASS' if no_number_check_passed else 'FAIL'}")
+
+    all_passed = all_passed and no_number_check_passed
+    return {"all_passed": all_passed, "cases": results,
+            "no_number_prediction_check_passed": no_number_check_passed}
 
 
 def main(config_path: str):
@@ -218,6 +283,12 @@ def main(config_path: str):
     report["labeling"] = labeling_report
     report["labeling"]["PASS"] = labeling_report["all_passed"]
 
+    # (f) GSM8K numeric-extraction regression checks (docs/known_issues.md #7)
+    logger.info("--- (f) GSM8K numeric extraction checks (regression for #7) ---")
+    gsm8k_report = run_gsm8k_numeric_checks(logger)
+    report["gsm8k_numeric_extraction"] = gsm8k_report
+    report["gsm8k_numeric_extraction"]["PASS"] = gsm8k_report["all_passed"]
+
     # --- figure: proper vs leaky, and selected vs random ---
     fig, ax = bar_with_errorbars(
         labels=["Proper (safe)", "Leaky (bug fixture)"],
@@ -239,7 +310,8 @@ def main(config_path: str):
 
     elapsed = time.time() - t_start
     overall_pass = all(report[k]["PASS"] for k in
-                         ["strong_signal", "pure_noise", "leakage_detection", "labeling"])
+                         ["strong_signal", "pure_noise", "leakage_detection",
+                          "labeling", "gsm8k_numeric_extraction"])
     report["overall_PASS"] = overall_pass
     report["elapsed_seconds"] = elapsed
 

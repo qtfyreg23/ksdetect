@@ -1,0 +1,1 @@
+{"example_id": "triviaqa_qz_4240", "dataset": "triviaqa", "task_type": "short_qa", "question": "Who won the 2010 Giro D'Italia?", "references": ["Ivan Basso"], "greedy_answer": "The 2010 Giro d'Italia was won by Ivan Basso of Italy.", "hard_label": 0, "soft_label": 0.0, "soft_label_n_samples": 10, "soft_label_n_incorrect": 0}

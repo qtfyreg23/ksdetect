@@ -23,10 +23,14 @@ def extract_gsm8k_reference_number(answer_field: str) -> float | None:
     not found (should not happen on well-formed GSM8K data — if it does,
     treat it as a data-quality issue to investigate, not silently skip).
     """
-    matches = re.findall(r"####\s*(-?[\d,]+(?:\.\d+)?)", answer_field)
+    matches = re.findall(r"####\s*(-?\d[\d,]*(?:\.\d+)?)", answer_field)
     if not matches:
         return None
-    return float(matches[-1].replace(",", ""))
+    cleaned = matches[-1].replace(",", "")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
 def extract_first_number(text: str) -> float | None:
@@ -35,11 +39,25 @@ def extract_first_number(text: str) -> float | None:
     intermediate numbers before the final answer; the final one is usually
     the model's actual answer). Returns None if no number found.
     Handles commas in numbers (e.g. "1,200") and simple decimals.
+
+    The pattern requires the match to START with a digit (after an optional
+    "-"), specifically to avoid the bug recorded in
+    docs/known_issues.md #7: an earlier version of this pattern
+    (`-?[\\d,]+`) could match a bare comma in ordinary prose (e.g. "Let me
+    think, the answer is...") because a lone "," satisfies "one or more of
+    {digit, comma}" — that match then became an empty string after
+    stripping commas, and float('') raised instead of this function
+    returning None as documented. Requiring a digit right after the
+    optional "-" rules that out structurally.
     """
-    matches = re.findall(r"-?[\d,]+(?:\.\d+)?", text)
+    matches = re.findall(r"-?\d[\d,]*(?:\.\d+)?", text)
     if not matches:
         return None
-    return float(matches[-1].replace(",", ""))
+    cleaned = matches[-1].replace(",", "")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
 def gsm8k_is_correct(prediction: str, reference_answer_field: str, tol: float = 1e-4) -> bool:

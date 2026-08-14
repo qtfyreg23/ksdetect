@@ -1,0 +1,50 @@
+# exp_02b_analysis — reads the activation shards + labels produced by
+# exp_02_coarse_scan and computes AUC (with CI) for every
+# (dataset, stage, module, layer, label_type, k) combination. Produces the
+# "wide scan result table" (project plan §5.2) — a CSV of numbers, plus a
+# handful of heatmap figures for quick visual scanning. Draws NO conclusions
+# — that's Stage 2 (现象筛选), a separate discussion after this data exists.
+#
+# This is PURE CPU / core.stats work — does not need the GPU or the model.
+
+experiment_name: "exp_02b_analysis"
+description: >
+  Stage-1 coarse-scan analysis. For every (dataset, stage, module, layer)
+  cell, loads the saved activations + generated labels, and for every
+  (label_type, k) combination runs core.stats.repeated_cv_auc, recording
+  mean/std/CI. Results are written incrementally to a JSONL file (one line
+  per cell) for resumability, then compiled into a CSV + heatmap figures at
+  the end.
+
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+activation_dir: "data/activations/exp_02_coarse_scan"
+
+datasets: ["truthfulqa", "triviaqa", "coqa", "medquad", "gsm8k"]
+stages: ["pregen", "posthoc"]
+modules: ["embedding", "attention", "ffn_module", "ffn_neuron", "residual"]
+layers: [0, 4, 8, 12, 16, 20, 24, 28, 31]   # must match exp_02's layers_coarse
+
+# k=null means "full representation, no dimension selection".
+k_values: [32, 256, null]
+selection_method: "l1"
+
+# Two label types run in parallel (project plan §5.1's "标签类型" free
+# variable). soft_binarized turns the continuous soft_label (fraction of
+# 10 samples judged incorrect) into a binary target via
+# soft_label > soft_label_binarize_threshold — this is a coarse-pass
+# SIMPLIFICATION (see docs/decisions.md D15), not a scientific claim that
+# this threshold is the right one; revisit if soft-label results look
+# interesting enough to dig into.
+label_types: ["hard", "soft_binarized"]
+soft_label_binarize_threshold: 0.0
+
+# --- CV settings (deliberately lighter than a "final" analysis — this is
+# the coarse pass; project plan §5.2 says coarse should be fast, not
+# maximally precise) ---
+n_splits: 5
+n_seeds: 5
+base_seed: 0
+
+output_dir: "experiments/exp_02b_analysis/results"
+progress_log_every_n_cells: 20
+resume: true

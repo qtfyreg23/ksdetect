@@ -17,8 +17,65 @@ from __future__ import annotations
 
 import numpy as np
 
-from .nested_cv import cross_validated_auc, make_stratified_folds
+from .nested_cv import cross_validated_auc, cross_validated_auc_multi_k, make_stratified_folds
 from .ci import bootstrap_ci
+
+
+def repeated_cv_auc_multi_k(
+    X: np.ndarray,
+    y: np.ndarray,
+    k_values: list,
+    selection_method: str = "l1",
+    n_splits: int = 5,
+    n_seeds: int = 10,
+    base_seed: int = 0,
+    on_seed_done=None,
+) -> dict:
+    """
+    Like repeated_cv_auc(), but for MULTIPLE k values at once, built on
+    cross_validated_auc_multi_k() so the (expensive, for high-dim modules)
+    feature ranking is computed once per fold and shared across all
+    requested k values instead of being recomputed per k — see
+    docs/known_issues.md #9.
+
+    on_seed_done: optional callback `on_seed_done(seed_idx, n_seeds,
+    elapsed_seconds)` invoked after each seed's n_splits folds finish, for
+    progress/heartbeat logging on cells that take a while (this is what
+    exp_02b_analysis uses so a slow cell doesn't look like a silent hang).
+
+    Returns {k: {"pooled_aucs":..., "mean":..., "std":..., "ci_lower":...,
+    "ci_upper":..., "n_seeds":..., "n_splits":...} for k in k_values}.
+    """
+    import time
+    pooled_by_k = {k: [] for k in k_values}
+
+    for seed_offset in range(n_seeds):
+        t0 = time.time()
+        seed = base_seed + seed_offset
+        per_k_fold_aucs = cross_validated_auc_multi_k(
+            X, y, k_values=k_values, selection_method=selection_method,
+            n_splits=n_splits, random_state=seed,
+        )
+        for k in k_values:
+            pooled_by_k[k].append(per_k_fold_aucs[k])
+
+        if on_seed_done is not None:
+            on_seed_done(seed_offset + 1, n_seeds, time.time() - t0)
+
+    output = {}
+    for k in k_values:
+        pooled = np.concatenate(pooled_by_k[k])
+        ci_lower, ci_upper = bootstrap_ci(pooled)
+        output[k] = {
+            "pooled_aucs": pooled,
+            "mean": float(pooled.mean()),
+            "std": float(pooled.std(ddof=1)),
+            "ci_lower": ci_lower,
+            "ci_upper": ci_upper,
+            "n_seeds": n_seeds,
+            "n_splits": n_splits,
+        }
+    return output
 
 
 def repeated_cv_auc(

@@ -1,0 +1,32 @@
+Verdict counts (all dataset x module x layer cells):
+verdict
+A_supported    147
+mixed           21
+B_supported     12
+
+Per-dataset breakdown:
+
+coqa:
+verdict
+A_supported    33
+mixed           2
+B_supported     1
+
+gsm8k:
+verdict
+A_supported    36
+
+medquad:
+verdict
+mixed          17
+B_supported    11
+A_supported     8
+
+triviaqa:
+verdict
+A_supported    36
+
+truthfulqa:
+verdict
+A_supported    34
+mixed           2

@@ -11,10 +11,13 @@ single-seed noise problem documented in docs/known_issues.md (#2, #3).
 from .nested_cv import (
     make_stratified_folds,
     select_features,
+    select_features_ranking,
     cross_validated_auc,
+    cross_validated_auc_multi_k,
 )
 from .multiseed import (
     repeated_cv_auc,
+    repeated_cv_auc_multi_k,
     matched_repeated_cv,
 )
 from .ci import (
@@ -29,8 +32,11 @@ from .significance import (
 __all__ = [
     "make_stratified_folds",
     "select_features",
+    "select_features_ranking",
     "cross_validated_auc",
+    "cross_validated_auc_multi_k",
     "repeated_cv_auc",
+    "repeated_cv_auc_multi_k",
     "matched_repeated_cv",
     "bootstrap_ci",
     "ci_lower_bound_exceeds",

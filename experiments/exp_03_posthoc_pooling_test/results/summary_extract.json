@@ -1,0 +1,24 @@
+{
+  "datasets": {
+    "truthfulqa": {
+      "n_examples": 817,
+      "n_batches": 817,
+      "completed": 817,
+      "resumed_skipped": 0,
+      "errored": 0,
+      "failed_batches": [],
+      "elapsed_seconds": 308.64211201667786
+    },
+    "medquad": {
+      "n_examples": 1000,
+      "n_batches": 1000,
+      "completed": 1000,
+      "resumed_skipped": 0,
+      "errored": 0,
+      "failed_batches": [],
+      "elapsed_seconds": 528.870335817337
+    }
+  },
+  "total_elapsed_seconds": 837.5561180114746,
+  "any_failures": false
+}

@@ -21,11 +21,18 @@ Pooling strategy (`pooling` argument):
     final position (-1) is the same real (non-pad) token index for every row
     in a batch, so this is a plain index — no attention_mask math needed.
   - "mean": mean-pool over all non-pad positions, using attention_mask to
-    exclude padding. Use this for "posthoc" extraction when you want a
-    summary over the whole generated answer rather than just its last token
-    (the project plan's later token-localization work, if it happens, will
-    likely replace this with a critical-token-weighted pool — that change
-    belongs here, not in an experiment script).
+    exclude padding. Pools over the ENTIRE sequence (prompt + answer, for
+    posthoc text) — for a posthoc summary that is NOT diluted by the prompt
+    tokens, use "answer_mean" instead.
+  - "answer_mean": mean-pool over only the LAST `answer_token_counts[i]`
+    real tokens of each row — i.e. only the generated-answer span, not the
+    prompt. Requires the `answer_token_counts` argument. Added specifically
+    for the Stage-3 discrimination experiment in
+    experiments/exp_03_posthoc_pooling_test (see docs/decisions.md D17) to
+    test whether "posthoc last-token pooling" was under-selling posthoc's
+    real signal — this was flagged as a deferred simplification back in
+    D11 and is now being resolved for a targeted comparison, not rolled out
+    to the full Stage-1 grid.
 """
 
 from __future__ import annotations
@@ -36,6 +43,27 @@ import numpy as np
 import torch
 
 
+def compute_prompt_token_lengths(tokenizer, prompts: list[str], max_length: int = 2048) -> list[int]:
+    """
+    Returns the UNPADDED token length of each prompt string, tokenized
+    individually (not as a padded batch) so the count is exact per example.
+    Used to figure out, for a posthoc text built as `prompt + answer`, how
+    many of its tokens belong to the answer (= total tokens for the full
+    posthoc text - this prompt length) — see "answer_mean" pooling above.
+
+    Deliberately a plain Python loop (not a batched tokenizer call): batch
+    tokenization with padding would make every row's length equal to the
+    batch max, destroying the per-example length information this function
+    exists to compute. This is fine cost-wise — tokenization itself is cheap
+    relative to a forward pass.
+    """
+    lengths = []
+    for p in prompts:
+        ids = tokenizer(p, truncation=True, max_length=max_length)["input_ids"]
+        lengths.append(len(ids))
+    return lengths
+
+
 def extract_batch(
     model,
     tokenizer,
@@ -44,6 +72,7 @@ def extract_batch(
     device: str = "cuda",
     pooling: str = "last",
     max_length: int = 2048,
+    answer_token_counts: list[int] | None = None,
 ) -> dict[str, dict[int, np.ndarray]]:
     """
     Tokenizes `texts` (already-assembled prompt or prompt+answer strings),
@@ -52,9 +81,27 @@ def extract_batch(
     and returns collector-shaped output:
         {module_name: {layer_idx: np.ndarray of shape (batch, dim)}}
     (embedding module uses layer_idx == -1, matching hooks.py's convention.)
+
+    answer_token_counts: required (and ONLY used) when pooling="answer_mean".
+    Must be the same length as `texts`; answer_token_counts[i] is the number
+    of trailing real tokens in texts[i] to mean-pool over (see
+    compute_prompt_token_lengths() for how to derive this for a
+    prompt+answer posthoc string). Silently clipped to each row's actual
+    real-token count if larger (logged via a printed warning, since this
+    function has no logger of its own — callers running at scale should
+    watch stdout/redirect it) — this should not normally happen unless the
+    original generation was truncated at max_new_tokens in a way that
+    doesn't match this function's own max_length truncation.
     """
-    if pooling not in ("last", "mean"):
-        raise ValueError(f"pooling must be 'last' or 'mean', got {pooling!r}")
+    if pooling not in ("last", "mean", "answer_mean"):
+        raise ValueError(f"pooling must be 'last', 'mean', or 'answer_mean', got {pooling!r}")
+    if pooling == "answer_mean" and answer_token_counts is None:
+        raise ValueError("pooling='answer_mean' requires answer_token_counts")
+    if answer_token_counts is not None and len(answer_token_counts) != len(texts):
+        raise ValueError(
+            f"answer_token_counts length ({len(answer_token_counts)}) must "
+            f"match texts length ({len(texts)})"
+        )
 
     inputs = tokenizer(
         texts,
@@ -70,15 +117,40 @@ def extract_batch(
         buffer = {m: dict(layers) for m, layers in collector.buffer.items()}
 
     attention_mask = inputs["attention_mask"].to(dtype=torch.float32, device="cpu")
+    seq_len = attention_mask.shape[1]
+
+    if pooling == "answer_mean":
+        # Left-padded: real tokens occupy the RIGHTMOST `real_len` positions
+        # of each row, ending at position seq_len-1. The answer span is the
+        # last `answer_token_counts[i]` of those real tokens, i.e. positions
+        # [seq_len - answer_token_counts[i], seq_len).
+        real_lens = attention_mask.sum(dim=1).long()
+        answer_mask = torch.zeros_like(attention_mask)
+        for i, n_answer in enumerate(answer_token_counts):
+            real_len = int(real_lens[i].item())
+            n_answer_clipped = min(n_answer, real_len)
+            if n_answer_clipped != n_answer:
+                print(
+                    f"[extract_batch] WARNING: answer_token_counts[{i}]="
+                    f"{n_answer} exceeds real token count {real_len} for "
+                    f"this row; clipped to {n_answer_clipped}. This should "
+                    f"be rare — investigate if it happens often (possible "
+                    f"truncation mismatch between generation and re-extraction)."
+                )
+            if n_answer_clipped > 0:
+                answer_mask[i, seq_len - n_answer_clipped:] = 1.0
+        mask_for_pooling = answer_mask
+    else:
+        mask_for_pooling = attention_mask
 
     pooled: dict[str, dict[int, np.ndarray]] = {m: {} for m in buffer}
     for module_name, layer_dict in buffer.items():
         for layer_idx, tensor in layer_dict.items():
-            # tensor: (batch, seq, dim), attention_mask: (batch, seq)
+            # tensor: (batch, seq, dim)
             if pooling == "last":
                 pooled_tensor = tensor[:, -1, :]
-            else:  # mean
-                mask = attention_mask.unsqueeze(-1)  # (batch, seq, 1)
+            else:  # "mean" or "answer_mean" — same math, different mask
+                mask = mask_for_pooling.unsqueeze(-1)  # (batch, seq, 1)
                 summed = (tensor * mask).sum(dim=1)
                 counts = mask.sum(dim=1).clamp(min=1.0)
                 pooled_tensor = summed / counts
@@ -123,3 +195,55 @@ def save_activation_shard(
                 os.path.join(layer_dir, f"shard_{shard_id:05d}.npy"),
                 arr,
             )
+
+
+def load_activation(
+    activation_dir: str,
+    dataset: str,
+    stage: str,
+    module: str,
+    layer: int,
+) -> tuple[np.ndarray, list[str]]:
+    """
+    Reads back ALL shards for one (dataset, stage, module, layer) cell,
+    concatenated in shard-index order, alongside the matching example_ids
+    (read from the same shard set's example_ids/ directory, same order).
+
+    Returns (X, example_ids) where X has shape (n_examples, dim) and
+    example_ids[i] corresponds to X[i].
+
+    Raises FileNotFoundError with a clear message if the directory doesn't
+    exist (e.g. wrong module/layer/stage combination, or extraction wasn't
+    run for that combination) rather than returning an empty array — an
+    empty result silently propagating into a CV call produces a confusing
+    downstream error instead of a clear one here.
+    """
+    layer_dir = os.path.join(activation_dir, dataset, stage, module, f"layer_{layer:03d}")
+    ids_dir = os.path.join(activation_dir, dataset, stage, "example_ids")
+    if not os.path.isdir(layer_dir):
+        raise FileNotFoundError(
+            f"No activation shards found at {layer_dir}. Check that "
+            f"extraction was run for dataset={dataset!r}, stage={stage!r}, "
+            f"module={module!r}, layer={layer!r}."
+        )
+
+    shard_files = sorted(f for f in os.listdir(layer_dir) if f.endswith(".npy"))
+    if not shard_files:
+        raise FileNotFoundError(f"{layer_dir} exists but has no shard files.")
+
+    X_parts, ids_parts = [], []
+    for shard_file in shard_files:
+        shard_id = shard_file  # same filename used for both activation and ids shards
+        X_parts.append(np.load(os.path.join(layer_dir, shard_file)))
+        ids_arr = np.load(os.path.join(ids_dir, shard_id), allow_pickle=True)
+        ids_parts.append(list(ids_arr))
+
+    X = np.concatenate(X_parts, axis=0)
+    example_ids = [eid for part in ids_parts for eid in part]
+    if X.shape[0] != len(example_ids):
+        raise ValueError(
+            f"Mismatch between activation rows ({X.shape[0]}) and example_ids "
+            f"({len(example_ids)}) for {layer_dir} — shard files may be "
+            f"corrupted or partially written; re-run extraction for this cell."
+        )
+    return X, example_ids

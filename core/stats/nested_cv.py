@@ -39,46 +39,41 @@ def make_stratified_folds(y: np.ndarray, n_splits: int = 5, random_state: int = 
     return list(skf.split(np.zeros_like(y), y))
 
 
-def select_features(
+def select_features_ranking(
     X_train: np.ndarray,
     y_train: np.ndarray,
-    k: int,
     method: str = "l1",
     random_state: int = 0,
 ) -> np.ndarray:
     """
-    Select k feature indices using ONLY X_train / y_train.
+    Returns a FULL ranking of ALL feature indices (best-to-worst) using ONLY
+    X_train / y_train — the top-k selection is just ranking[:k].
 
-    method:
-      - "l1": fit an L1-penalized logistic regression on the training fold,
-        rank features by |coefficient|, take the top-k. This is the default
-        used for the sparsity-scan experiments (k=32/64/128/... style curves).
-      - "variance": rank features by variance within X_train, take the top-k.
-        Cheap heuristic baseline for the "necessity of selection" ablation.
-      - "magnitude": rank features by mean absolute activation within X_train,
-        take the top-k. Another cheap heuristic baseline.
-      - "random": draw k indices uniformly at random (seeded by random_state).
-        This is the REQUIRED comparison arm for the selected-vs-random
-        ablation (project plan §7.2, Experiment 1 in the earlier research
-        notes) — it must go through this same function so that it is subject
-        to the exact same downstream evaluation code as every other method.
-
-    Returns an array of k feature-column indices into X_train's second axis.
+    This is the function that does the actual (potentially expensive) work;
+    select_features() below is now a thin wrapper for backward
+    compatibility. The reason this is split out: for a k-sweep (e.g.
+    k_values=[32, 256, None]) the "l1" method's ranking does NOT depend on
+    k — fitting the L1-penalized logistic regression once and slicing the
+    resulting ranking at different lengths is exactly equivalent to (but
+    far cheaper than) re-fitting it once per k. See
+    cross_validated_auc_multi_k() below, which uses this function directly
+    to avoid that redundant work — this was a real, measured bottleneck on
+    high-dimensional modules (ffn_neuron, 14336-dim) where each L1 fit
+    itself is slow (docs/known_issues.md #9).
     """
     n_features = X_train.shape[1]
-    k = min(k, n_features)
     rng = np.random.RandomState(random_state)
 
     if method == "random":
-        return rng.choice(n_features, size=k, replace=False)
+        return rng.permutation(n_features)
 
     if method == "variance":
         scores = X_train.var(axis=0)
-        return np.argsort(scores)[::-1][:k]
+        return np.argsort(scores)[::-1]
 
     if method == "magnitude":
         scores = np.abs(X_train).mean(axis=0)
-        return np.argsort(scores)[::-1][:k]
+        return np.argsort(scores)[::-1]
 
     if method == "l1":
         scaler = StandardScaler()
@@ -93,9 +88,36 @@ def select_features(
         )
         clf.fit(X_scaled, y_train)
         coefs = np.abs(clf.coef_).ravel()
-        return np.argsort(coefs)[::-1][:k]
+        return np.argsort(coefs)[::-1]
 
     raise ValueError(f"Unknown selection method: {method!r}")
+
+
+def select_features(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    k: int,
+    method: str = "l1",
+    random_state: int = 0,
+) -> np.ndarray:
+    """
+    Select k feature indices using ONLY X_train / y_train. Thin wrapper
+    around select_features_ranking()[:k] — kept for callers that only need
+    a single k (e.g. the regression-test fixture in
+    cross_validated_auc_LEAKY_FOR_TESTING_ONLY, or simple one-off scripts).
+
+    If you need MULTIPLE k values for the SAME (X_train, y_train) — e.g. a
+    k-sweep like [32, 256, None] — use cross_validated_auc_multi_k() instead
+    of calling this in a loop: for method="l1" in particular, calling this
+    once per k re-fits the same expensive L1 model redundantly.
+
+    method: see select_features_ranking()'s docstring for what each value
+    does ("l1" / "variance" / "magnitude" / "random").
+    """
+    n_features = X_train.shape[1]
+    k = min(k, n_features)
+    ranking = select_features_ranking(X_train, y_train, method=method, random_state=random_state)
+    return ranking[:k]
 
 
 def cross_validated_auc(
@@ -150,6 +172,72 @@ def cross_validated_auc(
         fold_aucs[i] = roc_auc_score(y_test, probs)
 
     return fold_aucs
+
+
+def cross_validated_auc_multi_k(
+    X: np.ndarray,
+    y: np.ndarray,
+    k_values: list,
+    selection_method: str = "l1",
+    n_splits: int = 5,
+    random_state: int = 0,
+    folds: list | None = None,
+) -> dict:
+    """
+    Like cross_validated_auc(), but evaluates MULTIPLE k values (e.g.
+    [32, 256, None]) in one pass, computing the (potentially expensive)
+    feature ranking ONCE PER FOLD and slicing it at each requested k,
+    instead of recomputing the ranking once per (fold, k) pair.
+
+    This matters a lot for high-dimensional modules (e.g. ffn_neuron,
+    14336-dim): the "l1" ranking method fits an L1-penalized logistic
+    regression on the full training fold, which is the expensive step —
+    that fit does not depend on k, so calling cross_validated_auc()
+    separately for k=32 and k=256 was redundantly repeating that fit. See
+    docs/known_issues.md #9.
+
+    Returns {k: np.ndarray of shape (n_splits,) fold AUCs, for each k in
+    k_values}. `None` is a valid entry in k_values (full representation,
+    no selection).
+    """
+    if folds is None:
+        folds = make_stratified_folds(y, n_splits=n_splits, random_state=random_state)
+
+    results = {k: np.zeros(len(folds)) for k in k_values}
+    needs_selection = any(k is not None for k in k_values)
+
+    for i, (train_idx, test_idx) in enumerate(folds):
+        X_train_full, X_test_full = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        ranking = None
+        if needs_selection:
+            # Computed ONCE per fold, reused for every k below — this is
+            # the whole point of this function versus calling
+            # cross_validated_auc() once per k.
+            ranking = select_features_ranking(
+                X_train_full, y_train, method=selection_method,
+                random_state=random_state,
+            )
+
+        for k in k_values:
+            if k is not None:
+                feat_idx = ranking[: min(k, X_train_full.shape[1])]
+                X_train = X_train_full[:, feat_idx]
+                X_test = X_test_full[:, feat_idx]
+            else:
+                X_train, X_test = X_train_full, X_test_full
+
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+
+            clf = LogisticRegression(max_iter=2000, random_state=random_state)
+            clf.fit(X_train_scaled, y_train)
+            probs = clf.predict_proba(X_test_scaled)[:, 1]
+            results[k][i] = roc_auc_score(y_test, probs)
+
+    return results
 
 
 def cross_validated_auc_LEAKY_FOR_TESTING_ONLY(

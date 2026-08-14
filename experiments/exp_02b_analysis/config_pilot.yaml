@@ -1,0 +1,31 @@
+experiment_name: exp_02b_analysis_pilot
+description: PILOT run — a small slice of the full grid (1 dataset, 1 stage, 2 modules, 2 layers, both
+  k values, both label types) used to measure REAL per-cell wall-clock time before committing to the full
+  grid (project plan §2.2). Uses a separate output_dir so it never collides with the full run.
+coarse_scan_output_dir: experiments/exp_02_coarse_scan/results
+activation_dir: data/activations/exp_02_coarse_scan
+datasets:
+- triviaqa
+stages:
+- pregen
+modules:
+- attention
+- ffn_neuron
+layers:
+- 0
+- 16
+k_values:
+- 32
+- 256
+- null
+selection_method: l1
+label_types:
+- hard
+- soft_binarized
+soft_label_binarize_threshold: 0.0
+n_splits: 5
+n_seeds: 5
+base_seed: 0
+output_dir: experiments/exp_02b_analysis/results_pilot
+progress_log_every_n_cells: 1
+resume: true

@@ -75,4 +75,121 @@ HF上没有统一权威账号托管,存在多个不同用户上传、字段不�
 处执行一次,不需要每次读数据都信任远程代码。`data/`目录已在`.gitignore`
 里,不进版本控制。
 
+### D11 — posthoc抽取这一轮粗扫用"last token"而不是"仅答案片段mean pooling"
+2026-08-11。posthoc本应该更能体现"生成的答案本身"的信号,理想做法是只在
+新生成的答案token范围内做mean pooling,但需要精确对齐每条样本答案的token
+边界(尤其在重新拼接文本、重新分词之后,边界不一定和`generate()`时的token
+切分完全一致)。这一轮粗扫为了控制复杂度和风险,posthoc和pregen一样都用
+"最后一个token"的激活,pooling方式在`config.yaml`里是`pooling_posthoc:
+"last"`。如果阶段2机制验证阶段发现posthoc信号异常弱,第一件要复查的事就
+是这个简化,而不是急着下"posthoc没有信号"的结论。
+
+### D12 — 生成用chat template包装,而不是裸文本续写
+2026-08-11。LLaMA-3.1-8B-Instruct是instruct模型,生成阶段统一用
+`tokenizer.apply_chat_template`包装成对话格式(单轮user消息)再送入
+`generate()`,而不是把question当纯文本续写——否则贪婪生成大概率生成不连
+贯的续写而非规范回答。pregen激活抽取用的也是这个chat模板包装后的文本(代
+表"模型即将开始回答之前"的状态),posthoc则是"chat模板文本+生成的答案"拼
+接后重新分词。
+
+### D13 — 抽取流水线的续跑机制:标签shard存在即视为该batch已完成
+2026-08-11。`exp_02_coarse_scan/run.py`每个batch处理完,先落盘activation
+shard,最后落盘标签shard(JSONL)——标签shard文件是否存在,就是续跑时判断
+"这个batch要不要跳过"的唯一依据,顺序不能颠倒(必须最后写标签文件,否则
+中途失败会把没抽完activation的batch误判为已完成)。同时给每次运行的
+`output_dir`绑定一个config内容的hash值,复用同一个`output_dir`但config变
+了会直接报错拒绝启动,防止新旧设置的结果混在一起(对应project plan
+§2.3)。
+
+### D14 — 粗扫规模下调:batch_size强制降到1,n_examples从2000降到1000
+2026-08-12。pilot(8条/数据集)实测:batch_size=4在24GB显存下OOM(有效生
+成batch是`batch_size × n_samples_for_soft_label`=4×10=40条序列同时生
+成,超出显存),用户手动降到batch_size=1才跑通。按batch_size=1的实测速率
+换算,原计划2000条/数据集(TruthfulQA除外用817全量)预计总耗时约17.3小
+时,其中MedQuad和GSM8K(生成长度256 token)占了约75%的耗时。与用户确认
+后,统一把`n_examples_per_dataset`降到1000,预计总耗时降到约8.5小时。
+`config.yaml`和`config_pilot.yaml`的`batch_size`默认值都改成1(不再是
+4),避免任何人从头跑一遍时重新踩一次OOM。若后续想恢复更大规模,需要重新
+挂一轮pilot观察显存,不能直接改回2000/更大batch_size。
+
+### D15 — soft_binarized标签:用soft_label > 0作为二值化阈值
+2026-08-12。`exp_02b_analysis`里`repeated_cv_auc`需要二值标签,但软标签
+(soft_label)是连续值(10次采样里的错误率)。这一轮粗扫分析把软标签简单
+二值化成`soft_label > 0`(即"10次采样里只要错1次就算不可靠"),作为硬标
+签之外的第二种`label_type`并行跑,不代表这是"正确"或唯一合理的阈值——只
+是粗扫阶段为了让软标签也能纳入AUC网格比较而选的一个简单、可复现的默认
+值。如果后续现象筛选阶段发现软标签本身值得深挖,阈值选择需要专门讨论(比
+如改成>=0.5多数错误,或者不二值化改用其他连续目标的分析方式)。
+
+### D16 — embedding模块在分析网格里固定用layer=-1,不套用其余9层
+2026-08-12。`core/extraction/hooks.py`里embedding只在每次前向传播时被记
+录一次(不分层深度),固定存在`layer_-1`下。`exp_02b_analysis/run.py`最初
+的cell构造逻辑对所有模块统一套用`layers_coarse`这9个层,会导致embedding
+在8/9个层上找不到对应shard(全部报FileNotFoundError,虽然被正确捕获跳
+过,但产生大量无意义的错误日志、浪费查找时间)。修复:新增
+`layers_for_module()`函数,embedding固定只返回`[-1]`,其余模块正常套用
+`layers_coarse`列表。这个bug是在用假数据做端到端沙箱测试时发现的,发现即
+改,未影响任何已跑的服务器端任务。
+
+### D17 — 新增answer_mean pooling,用于阶段3的posthoc<pregen现象区分实验
+2026-08-13。阶段1粗扫发现TruthfulQA/MedQuad的posthoc AUC反而低于pregen,
+在D11里已经标注过posthoc用"last token"pooling是粗扫阶段的简化,现在这个
+简化成了需要检验的对象。给`core/extraction/extract.py`的`extract_batch`
+新增`pooling="answer_mean"`选项(只在生成答案的token范围内做mean
+pooling,不含prompt部分),配合新增的`compute_prompt_token_lengths`(逐条
+非padding分词,得出每条prompt的真实token数,从而推算出posthoc文本里答案
+部分的token数)。索引逻辑(左padding场景下"取最后N个真实token"是否有偏移
+错误)已经用纯numpy单独验证过,沙箱里也用假数据端到端跑通了
+`exp_03_posthoc_pooling_test`的比较脚本(含对齐逻辑、embedding自动排除、
+判定规则)。这个pooling方式只用于`exp_03`这个针对性实验,**没有**回填进
+`exp_02_coarse_scan`的默认配置——是否要把粗扫的posthoc pooling方式整体换
+成answer_mean,要等这次判定结果出来再讨论,不能因为"感觉应该更好"就直接
+改掉已经产出的阶段1数据。
+
+### D18 — exp_03两阶段判定结果(2数据集试跑)与推广到全部5数据集的决定
+2026-08-14。`exp_03_posthoc_pooling_test`对TruthfulQA(全部完成)+MedQuad
+(因OOM中断)的判定结果:18个已完成cell里16个`A_supported`、2个`mixed`、
+0个`B_supported`,`posthoc_answermean`相对`posthoc_last`的提升几乎全部
+达到p<0.0001的显著水平。**结论:阶段1粗扫里"posthoc比pregen弱"这个现
+象,主要是"last token pooling+固定chat模板后缀"导致的测量artifact,不是
+真实的表征层面masking效应——原来的现象假设(解释B)不成立,予以撤回。**
+由于这个pooling问题是聊天模板机制本身导致的、和具体数据集内容无关,判断
+它很可能系统性影响了阶段1粗扫全部5个数据集的posthoc数据,不只是
+TruthfulQA/MedQuad这两个被挑出来细查的。决定:把`exp_03`的
+answer_mean重抽+三方比较推广到全部5个数据集(`config_full_rescan.yaml`,
+使用全新的`output_dir`/`activation_dir`,不与2数据集试跑的结果混用),
+目的是订正整张阶段1宽扫描地图的posthoc部分,而不是仅针对这两个数据集打
+补丁。订正后需要重新审视全貌,原本"哪些现象值得深挖"的判断可能因为这次
+订正而改变。
+
+### D19 — config-hash防护逻辑从exp_02内联代码提取为core.run_utils共享工具
+2026-08-14。`exp_03`的`run_01`/`run_02`都需要和`exp_02`同样的"复用
+output_dir时配置变了就报错拒绝启动"这个防护逻辑——这是第三次要写同一段代
+码,按项目规则(§2.5)不应该再复制粘贴,提取成`core/run_utils.py`。已验证
+新函数的哈希结果和`exp_02`原来内联实现逐字节一致,`exp_02`已经产出的
+`config_hash.txt`不会因为这次重构失效。
+
+### D20 — 全量5数据集判定结果:MedQuad是唯一真实效应,其余4个是artifact
+2026-08-14。`exp_03`全量5数据集重扫结果:coqa(33A/2mixed/1B)、gsm8k
+(36A)、triviaqa(36A)、truthfulqa(34A/2mixed)——四个数据集几乎全部判A,
+且订正后posthoc_answermean均值普遍反超pregen,原来阶段1粗扫看到的
+"posthoc偏弱"确认是pooling artifact,这四个数据集的该现象撤回。
+**MedQuad是唯一例外**:36个cell里只有8个判A,17个mixed、11个B,gap稳定在
+0.01-0.06,p值普遍<1e-4,残差/FFN模块尤其明显。这是一个真实、跨模块跨层
+一致的效应,不是噪声。**决定**:把原来"TruthfulQA+MedQuad"两数据集合并
+的现象假设拆开——TruthfulQA部分作废,MedQuad部分作为新的、更聚焦的候选现
+象保留,进入下一步排查。
+
+### D21 — 引入解释C(浅层捷径混淆),在深挖机制前先排除
+2026-08-14。MedQuad的hard_label分布极端不平衡(950/1000即95%判错,来自
+`run_00_qualitative_check`早前的定性预检),这本身可能是另一套解释:
+pregen阶段的高AUC,可能不是读出了"模型是否真的知道答案"这种深层知识信
+号,而是读出了问题文本本身某种浅层捷径(比如题目对应的疾病是否常见/题目
+表述长度等),而posthoc生成的大段套路化疾病描述冲淡了这种捷径。新增
+`run_03_medquad_confound_check.py`,用问题的词数/字符数这类最廉价的表层
+特征单独跑`core.stats.repeated_cv_auc`,如果这类特征本身就能获得接近
+pregen真实水平的AUC,说明捷径解释成立,需要在动"fluency masking"这类机
+制故事之前先把这个排除掉。已在沙箱用两种极端假数据(长度与标签无关/强相
+关)验证判定逻辑两个方向都正确响应。
+
 <!-- New entries go below this line. -->

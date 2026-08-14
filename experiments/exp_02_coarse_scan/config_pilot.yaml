@@ -1,0 +1,41 @@
+experiment_name: exp_02_coarse_scan_pilot
+description: PILOT run of exp_02_coarse_scan — tiny n_examples_per_dataset, used to verify the full generate+extract+label+save
+  pipeline works end-to-end and to observe GPU memory/throughput before committing to the full run (project
+  plan §2.2). Uses separate output_dir/activation_dir so it never collides with the full run.
+model_path: /autodl-fs/data/Llama-3.1-8B-Instruct
+device: cuda
+dtype: bfloat16
+datasets:
+- truthfulqa
+- triviaqa
+- coqa
+- medquad
+- gsm8k
+n_examples_per_dataset: 8
+layers_coarse:
+- 0
+- 4
+- 8
+- 12
+- 16
+- 20
+- 24
+- 28
+- 31
+modules:
+- embedding
+- attention
+- ffn_module
+- ffn_neuron
+- residual
+pooling_pregen: last
+pooling_posthoc: last
+max_new_tokens_override: {}
+n_samples_for_soft_label: 10
+sampling_temperature: 0.7
+batch_size: 1
+random_state: 0
+resume: true
+output_dir: experiments/exp_02_coarse_scan/results_pilot
+activation_dir: data/activations/exp_02_coarse_scan_pilot
+progress_log_every_n_batches: 1

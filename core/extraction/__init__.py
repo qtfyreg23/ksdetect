@@ -19,7 +19,8 @@ large-scale extraction, per project plan §2.2 ("先在少量案例上验证").
 
 from .model_loader import load_model_and_tokenizer, MODEL_PATH
 from .hooks import ActivationCollector, SUPPORTED_MODULES
-from .extract import extract_batch, save_activation_shard
+from .extract import extract_batch, save_activation_shard, load_activation, compute_prompt_token_lengths
+from .generate import generate_greedy_batch, generate_samples_batch, DEFAULT_MAX_NEW_TOKENS
 
 __all__ = [
     "load_model_and_tokenizer",
@@ -28,4 +29,9 @@ __all__ = [
     "SUPPORTED_MODULES",
     "extract_batch",
     "save_activation_shard",
+    "load_activation",
+    "compute_prompt_token_lengths",
+    "generate_greedy_batch",
+    "generate_samples_batch",
+    "DEFAULT_MAX_NEW_TOKENS",
 ]

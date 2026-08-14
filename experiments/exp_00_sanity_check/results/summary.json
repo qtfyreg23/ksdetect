@@ -124,6 +124,76 @@
     ],
     "PASS": true
   },
+  "gsm8k_numeric_extraction": {
+    "all_passed": true,
+    "cases": [
+      {
+        "text": "The answer is 42.",
+        "expected": 42.0,
+        "actual": 42.0,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "She has 1,200 apples.",
+        "expected": 1200.0,
+        "actual": 1200.0,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "Let me think, the answer is not immediately clear.",
+        "expected": null,
+        "actual": null,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "First, second, third — no numbers here, just commas.",
+        "expected": null,
+        "actual": null,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "-17 is the result.",
+        "expected": -17.0,
+        "actual": -17.0,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "#### 18",
+        "expected": 18.0,
+        "actual": 18.0,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "",
+        "expected": null,
+        "actual": null,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": ",",
+        "expected": null,
+        "actual": null,
+        "raised": false,
+        "passed": true
+      },
+      {
+        "text": "The value is 3.5 kg.",
+        "expected": 3.5,
+        "actual": 3.5,
+        "raised": false,
+        "passed": true
+      }
+    ],
+    "no_number_prediction_check_passed": true,
+    "PASS": true
+  },
   "overall_PASS": true,
-  "elapsed_seconds": 17.152645111083984
+  "elapsed_seconds": 18.564148902893066
 }

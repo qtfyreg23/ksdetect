@@ -1,0 +1,19 @@
+2026-08-14 08:47:00,684 [INFO] === exp_03 run_02: pregen vs posthoc_last vs posthoc_answermean ===
+2026-08-14 08:48:46,126 [INFO] truthfulqa/attention/layer=0: pregen=0.590 posthoc_last=0.506 posthoc_answermean=0.608 p_vs_pregen=0.0212 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:50:05,614 [INFO] truthfulqa/attention/layer=4: pregen=0.619 posthoc_last=0.539 posthoc_answermean=0.625 p_vs_pregen=0.1280 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:51:18,715 [INFO] truthfulqa/attention/layer=8: pregen=0.592 posthoc_last=0.589 posthoc_answermean=0.663 p_vs_pregen=0.0000 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:52:26,010 [INFO] truthfulqa/attention/layer=12: pregen=0.630 posthoc_last=0.569 posthoc_answermean=0.656 p_vs_pregen=0.0029 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:53:29,303 [INFO] truthfulqa/attention/layer=16: pregen=0.627 posthoc_last=0.575 posthoc_answermean=0.624 p_vs_pregen=0.6322 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:54:34,924 [INFO] truthfulqa/attention/layer=20: pregen=0.622 posthoc_last=0.549 posthoc_answermean=0.632 p_vs_pregen=0.2115 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:55:44,097 [INFO] truthfulqa/attention/layer=24: pregen=0.567 posthoc_last=0.553 posthoc_answermean=0.611 p_vs_pregen=0.0000 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:56:36,386 [INFO] truthfulqa/attention/layer=28: pregen=0.589 posthoc_last=0.565 posthoc_answermean=0.602 p_vs_pregen=0.0506 p_vs_last=0.0001 -> A_supported
+2026-08-14 08:57:46,886 [INFO] truthfulqa/attention/layer=31: pregen=0.610 posthoc_last=0.580 posthoc_answermean=0.633 p_vs_pregen=0.0011 p_vs_last=0.0000 -> A_supported
+2026-08-14 08:59:33,412 [INFO] truthfulqa/ffn_module/layer=0: pregen=0.606 posthoc_last=0.511 posthoc_answermean=0.613 p_vs_pregen=0.1629 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:00:34,821 [INFO] truthfulqa/ffn_module/layer=4: pregen=0.599 posthoc_last=0.557 posthoc_answermean=0.625 p_vs_pregen=0.0007 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:01:37,222 [INFO] truthfulqa/ffn_module/layer=8: pregen=0.630 posthoc_last=0.528 posthoc_answermean=0.673 p_vs_pregen=0.0000 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:02:44,820 [INFO] truthfulqa/ffn_module/layer=12: pregen=0.631 posthoc_last=0.580 posthoc_answermean=0.658 p_vs_pregen=0.0000 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:03:38,195 [INFO] truthfulqa/ffn_module/layer=16: pregen=0.656 posthoc_last=0.589 posthoc_answermean=0.640 p_vs_pregen=0.0088 p_vs_last=0.0000 -> mixed
+2026-08-14 09:04:30,683 [INFO] truthfulqa/ffn_module/layer=20: pregen=0.656 posthoc_last=0.550 posthoc_answermean=0.628 p_vs_pregen=0.0000 p_vs_last=0.0000 -> mixed
+2026-08-14 09:05:17,514 [INFO] truthfulqa/ffn_module/layer=24: pregen=0.643 posthoc_last=0.576 posthoc_answermean=0.628 p_vs_pregen=0.0724 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:06:07,284 [INFO] truthfulqa/ffn_module/layer=28: pregen=0.632 posthoc_last=0.569 posthoc_answermean=0.640 p_vs_pregen=0.2115 p_vs_last=0.0000 -> A_supported
+2026-08-14 09:07:19,112 [INFO] truthfulqa/ffn_module/layer=31: pregen=0.592 posthoc_last=0.565 posthoc_answermean=0.606 p_vs_pregen=0.0461 p_vs_last=0.0000 -> A_supported

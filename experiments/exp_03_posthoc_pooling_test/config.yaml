@@ -1,0 +1,62 @@
+# exp_03_posthoc_pooling_test — Stage 3 discrimination experiment.
+#
+# Phenomenon being tested: in the Stage-1 coarse scan, TruthfulQA and
+# MedQuad showed LOWER posthoc AUC than pregen AUC, despite posthoc having
+# strictly more information available (prompt+answer vs prompt-only).
+#
+# Competing explanations:
+#   A (pooling artifact): posthoc used "last token" pooling, which may be a
+#      poor summary if answers end in low-information tokens.
+#   B (real masking effect): even a fair summary of the full answer content
+#      still carries less signal than pregen — fluency masks uncertainty.
+#
+# This experiment does NOT re-run generation — it reuses the greedy_answer
+# text already saved by exp_02_coarse_scan, and only re-extracts posthoc
+# activations under a new pooling scheme ("answer_mean": mean-pool over
+# ONLY the generated-answer token span, not the whole prompt+answer
+# sequence). Pregen and posthoc("last") activations are REUSED from
+# exp_02, not recomputed.
+
+experiment_name: "exp_03_posthoc_pooling_test"
+description: >
+  Re-extracts posthoc activations for TruthfulQA and MedQuad using
+  "answer_mean" pooling (mean over only the generated-answer tokens),
+  reusing already-generated greedy answers from exp_02_coarse_scan (no new
+  generation). Compares pregen vs posthoc("last", from exp_02) vs
+  posthoc("answer_mean", new) via matched paired significance testing, to
+  discriminate between the pooling-artifact and real-masking-effect
+  explanations for the "posthoc < pregen" phenomenon observed in the
+  Stage-1 coarse scan for these two datasets.
+
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+
+datasets: ["truthfulqa", "medquad"]
+
+# Where to read the ALREADY-COMPUTED labels + pregen/posthoc(last) activations from:
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+coarse_scan_activation_dir: "data/activations/exp_02_coarse_scan"
+
+# Where to write the NEW posthoc(answer_mean) activations:
+activation_dir: "data/activations/exp_03_posthoc_pooling_test"
+
+layers_coarse: [0, 4, 8, 12, 16, 20, 24, 28, 31]   # must match exp_02's layers_coarse
+modules: ["embedding", "attention", "ffn_module", "ffn_neuron", "residual"]
+
+batch_size: 1          # same conservative default that worked for exp_02
+max_input_length: 2048
+progress_log_every_n_batches: 20
+resume: true
+
+output_dir: "experiments/exp_03_posthoc_pooling_test/results"
+
+# --- Analysis settings (run_02_compare.py) ---
+n_splits: 5
+n_seeds: 10             # higher than the Stage-1 coarse pass's n_seeds=5,
+                          # because this is now a confirmatory/discriminating
+                          # test where we actually need the paired
+                          # significance test to be trustworthy, not just a
+                          # quick scan
+base_seed: 0
+significance_alpha: 0.05
