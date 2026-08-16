@@ -1,1 +1,0 @@
-{"example_id": "triviaqa_qb_1912", "dataset": "triviaqa", "task_type": "short_qa", "question": "On a standard dartboard, which number lies opposite number 4?", "references": ["16", "sixteen"], "greedy_answer": "On a standard dartboard, the number opposite 4 is 20.", "hard_label": 1, "soft_label": 1.0, "soft_label_n_samples": 10, "soft_label_n_incorrect": 10}

@@ -192,4 +192,69 @@ pregen真实水平的AUC,说明捷径解释成立,需要在动"fluency masking"�
 制故事之前先把这个排除掉。已在沙箱用两种极端假数据(长度与标签无关/强相
 关)验证判定逻辑两个方向都正确响应。
 
+### D22 — H1/H2区分实验:新增前K窗口pooling,以及跨数据集普适性预检
+2026-08-15。在MedQuad现象(D20/D21)基础上,讨论了H1(稀释:信息集中在答
+案前部,整段平均稀释信号)和H2(内容/文体掩盖:模型一开口这件事本身盖住
+信号,与位置无关)两种机制假说的普适性——H1本质是"critical token定位"
+这条已有研究路线的一个实例,天花板有限;H2如果成立,能预测"post-hoc检测
+方法在哪些领域系统性更弱",可以直接对照LAFaCT等已发表工作的跨domain数
+字做外部验证,也能直接指导"根据领域文体同质性自适应选择依赖pregen还是
+posthoc信号"这样的方法设计,普适性和方法论价值明显更高。
+决定分两步验证:①`exp_04_cross_dataset_check`(纯CPU,零成本):用"正确
+/错误答案长度分布的Cohen's d"作为文体同质性的粗糙代理,和已知的
+pregen-posthoc gap跨5个数据集做相关性检查(n=5,仅作方向参考,非确证)。
+②`exp_05_medquad_dilution_vs_style`:给`extract_batch`的`answer_mean`
+pooling新增`answer_window_k`参数(只取答案开头前K个token,不是整段),
+对MedQuad(主要)和TruthfulQA(对照,已知是纯artifact数据集)重新抽取
+K=20/50/100三档,和已有的pregen/posthoc_last/posthoc_full做六方配对比
+较,判定规则(front20是否显著弱于full)已用两种方向相反的构造数据验证过
+两个分支都正确。
+
+### D23 — H1/H2判定的自动verdict函数太粗,漏掉了真正的模式;MedQuad现象重新定性
+2026-08-16。`exp_05`全量结果出来后,自动`verdict()`函数把绝大多数cell判
+成`H2_supported`(69/72),但人工核对均值发现函数没抓住真正的规律:
+`front50`(0.836)、`front100`(0.837)几乎和`pregen`(0.839)完全一致(四个
+模块的gap都在-0.014~+0.019之间,基本是噪声),只有`full`(整段平均,
+0.795)明显更差——这是"先升后降"的非单调模式,不是我原来预设的"单调回
+升(H1)"或"全程持平(H2)"任何一种,自动判定函数只比较了front20 vs
+full,没有捕捉到front50/100这个更关键的中间态。
+
+**结论重新定性**:MedQuad答案特别长(平均125-157词),选对pooling窗口
+(前50-100个token)之后,posthoc基本追平pregen——**MedQuad的"posthoc更
+弱"现象,大概率也是pooling窗口和答案长度不匹配导致的artifact,不是真实
+的表征层面masking效应(H2)。** 结合`exp_04`跨数据集检验里长度同质性代理
+和gap的相关性也只有0.10(接近0,不支持H2的普适性预测),H2这条"fluency
+masking"的机制故事现在证据不足,不建议继续按这个方向包装成论文的核心贡
+献。
+
+**教训记录**:自动化的二元判定函数(`H1_supported`/`H2_supported`)在设
+计时只考虑了两种预设模式,遇到真实数据里更复杂的非单调模式时会给出误导
+性结论。以后类似的多档位扫描,除了看自动判定,必须把每一档的原始均值列
+出来人工过一遍,不能只信一个自动化标签。已补充
+`run_03_optimal_window_check.py`直接检验front50/100是否和pregen统计上不
+可区分。
+
+### D24 — run_03结果修正:逐层看front50/100不是干净地追平pregen,有显著双向波动
+2026-08-16。`run_03_optimal_window_check.py`全量结果:模块平均层面确实
+front50/100比full更接近pregen(方向判断不变),但逐层看,front50显著偏离
+pregen的cell有47/72(65%),而且有的层front50显著低于pregen(如MedQuad
+attention层0:0.813 vs 0.850,p=0.0002),有的层front50显著高于pregen
+(如MedQuad attention层12:0.867 vs 0.781,p<1e-13)。**教训**:之前只看
+模块平均值下的"gap≈0"结论,把这种层间双向波动平均掉了,显得比实际更干
+净。这不改变"MedQuad现象主要是pooling窗口artifact、H2证据不足"这个大方
+向判断,但后续涉及"跨层平均相关系数"的分析,必须同时附上逐层原始数据,
+不能只报一个汇总数字。
+
+### D25 — exp_06:用订正pooling复核层深度依赖模式,只需给GSM8K补抽
+2026-08-16。決定重新检验阶段1粗扫里"层深度依赖任务类型"这个候选现象(深
+度敏感:TriviaQA/CoQA/TruthfulQA(posthoc);深度不敏感:MedQuad/GSM8K),
+因为原始数据用的是有问题的last-token pooling,不能排除这个模式本身部分
+是artifact。按平均答案长度判断,只有MedQuad(已在exp_05订正)和GSM8K
+(120+词,需要新抽)会因为pooling窗口选择产生实质差异,TruthfulQA
+(exp_05已订正)、TriviaQA/CoQA(答案很短,front100约等于exp_03已有的整
+段平均)不需要新抽取。同时按D24的教训,`run_02`的输出强制附带逐层原始数
+据,不能只依赖汇总相关系数下结论。`run_03`把exp_03的MedQuad长度捷径检验
+泛化到GSM8K,并针对数学题额外加了"问题里数字个数/最大数字"这两个候选捷
+径特征,已用构造数据验证检出逻辑正确。
+
 <!-- New entries go below this line. -->

@@ -1,1 +1,0 @@
-{"example_id": "triviaqa_qb_2498", "dataset": "triviaqa", "task_type": "short_qa", "question": "How many square stickers are on each face of a classic Rubik’s Cube?", "references": ["Nine", "9", "nine"], "greedy_answer": "On a classic Rubik's Cube, each face has 9 stickers.", "hard_label": 0, "soft_label": 0.0, "soft_label_n_samples": 10, "soft_label_n_incorrect": 0}

@@ -1,1 +1,0 @@
-{"example_id": "triviaqa_qz_6713", "dataset": "triviaqa", "task_type": "short_qa", "question": "How many lines are there in a sonnet?", "references": ["14", "fourteen"], "greedy_answer": "There are 14 lines in a traditional sonnet.", "hard_label": 0, "soft_label": 0.4, "soft_label_n_samples": 10, "soft_label_n_incorrect": 4}

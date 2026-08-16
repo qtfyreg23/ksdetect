@@ -1,0 +1,62 @@
+# exp_05_medquad_dilution_vs_style — Stage 4 mechanism discrimination.
+#
+# H1 (dilution): informative content is concentrated early in MedQuad
+#   answers; averaging over the WHOLE answer dilutes it. Prediction: AUC
+#   should rise as the pooling window grows from a short front-window
+#   toward the full answer (front20 < front50 < front100 ~= full).
+# H2 (content/style masking): the signal is already gone as soon as the
+#   model starts speaking in its confident/fluent register, regardless of
+#   how much of the answer you average over. Prediction: AUC should be
+#   roughly FLAT across window sizes (front20 ~= front50 ~= front100 ~= full),
+#   all similarly below pregen.
+#
+# No new generation — reuses greedy_answer text from exp_02_coarse_scan
+# (same as exp_03). Only extracts NEW posthoc activations under
+# "answer_mean" pooling restricted to the first K tokens of the answer
+# (K in front_window_k_values).
+#
+# truthfulqa is included as a CONTROL dataset: exp_03 already showed its
+# "posthoc < pregen" gap fully resolves under whole-answer answer_mean
+# pooling (explanation A). If H1/H2's front-window pattern shows up there
+# too (even faintly), that would suggest the mechanism isn't purely
+# MedQuad-specific; if truthfulqa shows no degradation at any window size,
+# that's the expected "nothing to explain here" control result.
+
+experiment_name: "exp_05_medquad_dilution_vs_style"
+description: >
+  Re-extracts posthoc activations for MedQuad (primary) and TruthfulQA
+  (control) using "answer_mean" pooling restricted to the FIRST K tokens
+  of the generated answer, for K in front_window_k_values. Compares
+  against pregen, posthoc_last, and posthoc_answermean(full answer) — all
+  reused from exp_02/exp_03 — via matched paired significance testing, to
+  discriminate between the dilution (H1) and content/style-masking (H2)
+  explanations for MedQuad's persistent pregen>posthoc gap.
+
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+
+datasets: ["medquad", "truthfulqa"]
+
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+coarse_scan_activation_dir: "data/activations/exp_02_coarse_scan"
+exp03_activation_dir: "data/activations/exp_03_posthoc_pooling_full_rescan"
+
+activation_dir: "data/activations/exp_05_medquad_dilution_vs_style"
+
+front_window_k_values: [20, 50, 100]
+
+layers_coarse: [0, 4, 8, 12, 16, 20, 24, 28, 31]
+modules: ["embedding", "attention", "ffn_module", "ffn_neuron", "residual"]
+
+batch_size: 1
+max_input_length: 2048
+progress_log_every_n_batches: 20
+resume: true
+
+output_dir: "experiments/exp_05_medquad_dilution_vs_style/results"
+
+n_splits: 5
+n_seeds: 10
+base_seed: 0
+significance_alpha: 0.05

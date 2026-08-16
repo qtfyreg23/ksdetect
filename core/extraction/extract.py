@@ -33,6 +33,15 @@ Pooling strategy (`pooling` argument):
     real signal — this was flagged as a deferred simplification back in
     D11 and is now being resolved for a targeted comparison, not rolled out
     to the full Stage-1 grid.
+    Optional `answer_window_k` argument (only meaningful with
+    pooling="answer_mean"): if given, restricts the pooling window to the
+    FIRST `answer_window_k` tokens of the answer span (not the whole
+    thing) — added for the exp_05 dilution-vs-style discrimination
+    experiment (docs/decisions.md D22), to test whether signal loss is a
+    function of averaging over a lot of the answer (dilution) or happens
+    even in a short leading window (content/style masking). Left as None
+    (pool over the WHOLE answer span) by default — unchanged behavior for
+    every prior caller.
 """
 
 from __future__ import annotations
@@ -73,6 +82,7 @@ def extract_batch(
     pooling: str = "last",
     max_length: int = 2048,
     answer_token_counts: list[int] | None = None,
+    answer_window_k: int | None = None,
 ) -> dict[str, dict[int, np.ndarray]]:
     """
     Tokenizes `texts` (already-assembled prompt or prompt+answer strings),
@@ -84,7 +94,7 @@ def extract_batch(
 
     answer_token_counts: required (and ONLY used) when pooling="answer_mean".
     Must be the same length as `texts`; answer_token_counts[i] is the number
-    of trailing real tokens in texts[i] to mean-pool over (see
+    of trailing real tokens in texts[i] that belong to the answer (see
     compute_prompt_token_lengths() for how to derive this for a
     prompt+answer posthoc string). Silently clipped to each row's actual
     real-token count if larger (logged via a printed warning, since this
@@ -92,11 +102,18 @@ def extract_batch(
     watch stdout/redirect it) — this should not normally happen unless the
     original generation was truncated at max_new_tokens in a way that
     doesn't match this function's own max_length truncation.
+
+    answer_window_k: optional, only used with pooling="answer_mean". If
+    given, pools over just the FIRST answer_window_k tokens of each row's
+    answer span (clipped to that row's actual answer length if shorter),
+    instead of the whole answer span.
     """
     if pooling not in ("last", "mean", "answer_mean"):
         raise ValueError(f"pooling must be 'last', 'mean', or 'answer_mean', got {pooling!r}")
     if pooling == "answer_mean" and answer_token_counts is None:
         raise ValueError("pooling='answer_mean' requires answer_token_counts")
+    if answer_window_k is not None and pooling != "answer_mean":
+        raise ValueError("answer_window_k is only meaningful with pooling='answer_mean'")
     if answer_token_counts is not None and len(answer_token_counts) != len(texts):
         raise ValueError(
             f"answer_token_counts length ({len(answer_token_counts)}) must "
@@ -121,9 +138,13 @@ def extract_batch(
 
     if pooling == "answer_mean":
         # Left-padded: real tokens occupy the RIGHTMOST `real_len` positions
-        # of each row, ending at position seq_len-1. The answer span is the
-        # last `answer_token_counts[i]` of those real tokens, i.e. positions
-        # [seq_len - answer_token_counts[i], seq_len).
+        # of each row, ending at position seq_len-1. The answer span STARTS
+        # at position (seq_len - answer_token_counts[i]). Without
+        # answer_window_k, the window runs to the end of the sequence (the
+        # whole answer); with answer_window_k, the window is truncated to
+        # only the first answer_window_k tokens of that span (verified with
+        # a standalone numpy check before being wired in here — see
+        # docs/decisions.md D22).
         real_lens = attention_mask.sum(dim=1).long()
         answer_mask = torch.zeros_like(attention_mask)
         for i, n_answer in enumerate(answer_token_counts):
@@ -137,8 +158,14 @@ def extract_batch(
                     f"be rare — investigate if it happens often (possible "
                     f"truncation mismatch between generation and re-extraction)."
                 )
-            if n_answer_clipped > 0:
-                answer_mask[i, seq_len - n_answer_clipped:] = 1.0
+            answer_start = seq_len - n_answer_clipped
+            if answer_window_k is not None:
+                window_len = min(answer_window_k, n_answer_clipped)
+                window_end = answer_start + window_len
+            else:
+                window_end = seq_len
+            if window_end > answer_start:
+                answer_mask[i, answer_start:window_end] = 1.0
         mask_for_pooling = answer_mask
     else:
         mask_for_pooling = attention_mask

@@ -1,0 +1,28 @@
+# exp_04_cross_dataset_check — cheap, CPU-only generalization check.
+#
+# Tests whether explanation H2 (style/content masking, not just a MedQuad
+# quirk) predicts a pattern ACROSS all 5 Stage-1 datasets: datasets where
+# correct and incorrect answers are stylistically hard to tell apart
+# (crude proxy: length-distribution similarity) should show a BIGGER
+# pregen-vs-posthoc_answermean gap.
+#
+# n=5 datasets — NOT enough for a rigorous statistical claim (see project
+# plan's repeated caution about small-n inference). This is a directional
+# check to decide whether H2 is worth deepening as a general story, not a
+# confirmatory test.
+
+experiment_name: "exp_04_cross_dataset_check"
+description: >
+  For each of the 5 datasets, computes a crude style-homogeneity proxy
+  (effect size of the length difference between correct (hard_label=0) and
+  incorrect (hard_label=1) greedy answers — smaller |d| means correct and
+  incorrect answers look more alike stylistically) and correlates it
+  against the already-known pregen-vs-posthoc_answermean AUC gap from
+  exp_03's full 5-dataset rescan. No new extraction — reads existing
+  labels + exp_03's discrimination_results.csv only.
+
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+exp03_discrimination_csv: "experiments/exp_03_posthoc_pooling_test/results_full_rescan/discrimination_results.csv"
+datasets: ["truthfulqa", "triviaqa", "coqa", "medquad", "gsm8k"]
+
+output_dir: "experiments/exp_04_cross_dataset_check/results"

@@ -1,0 +1,84 @@
+# exp_06_depth_correlation_recheck
+#
+# Re-checks the "two-cluster" layer-depth-AUC correlation pattern observed
+# in the original Stage-1 wide scan (some datasets: signal builds with
+# depth; others: saturates at shallow layers) using CORRECTED posthoc
+# pooling, now that we know naive "last token" / "whole answer mean"
+# pooling can be a meaningful confound (docs/decisions.md D17-D23).
+#
+# Per-dataset posthoc source used (only extract NEW data where it would
+# actually differ from what we already have — average answer length
+# determines this, see the README):
+#   - medquad, truthfulqa: reuse exp_05's "posthoc_front100" (already
+#     extracted)
+#   - gsm8k: NEW extraction this experiment (run_01) — average answer
+#     length (113-136 words) is in the same "long enough to matter" range
+#     as medquad
+#   - triviaqa, coqa: reuse exp_03's "posthoc_answermean" (whole-answer) —
+#     average answer length (18-29 words) is well under the 100-token
+#     window, so front100 would be ~identical to the whole-answer mean
+#     already computed; no new extraction needed.
+#
+# Two follow-up checks after the depth-correlation numbers are in:
+#   1. Does the two-cluster pattern (deep-dependent vs shallow-saturating)
+#      survive the correction, or was part of it itself a pooling artifact?
+#   2. For datasets that still saturate at shallow layers (candidates:
+#      medquad, gsm8k), is that shallow-layer signal explainable by a cheap
+#      surface shortcut (generalizing exp_03's length-shortcut check,
+#      docs/decisions.md D21) — this must be ruled out before treating
+#      "shallow saturation" as evidence of low task complexity.
+
+experiment_name: "exp_06_depth_correlation_recheck"
+description: >
+  Re-derives the layer-depth vs AUC correlation per dataset using corrected
+  posthoc pooling (front100 window where it matters, whole-answer mean
+  where average answer length is already short enough), to check whether
+  the "two-cluster" depth-dependence pattern from the original Stage-1
+  wide scan survives now that we understand pooling-window artifacts
+  better. Also audits shallow-layer signal for surface shortcuts on the
+  datasets that appear to saturate early.
+
+model_path: "/autodl-fs/data/Llama-3.1-8B-Instruct"
+device: "cuda"
+dtype: "bfloat16"
+
+# --- Data sources ---
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+coarse_scan_activation_dir: "data/activations/exp_02_coarse_scan"
+exp03_activation_dir: "data/activations/exp_03_posthoc_pooling_full_rescan"
+exp05_activation_dir: "data/activations/exp_05_medquad_dilution_vs_style"
+old_wide_scan_csv: "experiments/exp_02b_analysis/results/wide_scan_results.csv"  # for old-vs-new comparison; optional, script degrades gracefully if missing
+
+activation_dir: "data/activations/exp_06_depth_correlation_recheck"  # only used for the NEW gsm8k extraction
+
+# Which posthoc source to use per dataset (see header comment above) —
+# explicit, not inferred at runtime, so it's auditable.
+posthoc_source_by_dataset:
+  medquad: {experiment: "exp05", stage: "posthoc_front100"}
+  truthfulqa: {experiment: "exp05", stage: "posthoc_front100"}
+  gsm8k: {experiment: "exp06", stage: "posthoc_front100"}
+  triviaqa: {experiment: "exp03", stage: "posthoc_answermean"}
+  coqa: {experiment: "exp03", stage: "posthoc_answermean"}
+
+layers_coarse: [0, 4, 8, 12, 16, 20, 24, 28, 31]
+modules: ["embedding", "attention", "ffn_module", "ffn_neuron", "residual"]
+
+# --- gsm8k extraction (run_01 only) ---
+front_window_k_values: [50, 100]
+batch_size: 1
+max_input_length: 2048
+progress_log_every_n_batches: 20
+resume: true
+
+output_dir: "experiments/exp_06_depth_correlation_recheck/results"
+
+# --- Analysis settings ---
+n_splits: 5
+n_seeds: 10
+base_seed: 0
+significance_alpha: 0.05
+
+# For run_03's shortcut audit — set/adjust AFTER looking at run_02's
+# output; these are the initial candidates based on the ORIGINAL
+# (pre-correction) wide scan showing near-zero layer correlation.
+shallow_audit_datasets: ["medquad", "gsm8k"]

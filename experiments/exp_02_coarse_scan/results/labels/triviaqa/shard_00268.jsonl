@@ -1,1 +1,0 @@
-{"example_id": "triviaqa_qz_2", "dataset": "triviaqa", "task_type": "short_qa", "question": "What are the three primary colours of light?", "references": ["Red, Blue and Green"], "greedy_answer": "The three primary colours of light are:\n\n1. Red\n2. Green\n3. Blue", "hard_label": 1, "soft_label": 0.7, "soft_label_n_samples": 10, "soft_label_n_incorrect": 7}
