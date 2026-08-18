@@ -1,0 +1,65 @@
+# exp_07_medquad_shallow_signal_probe
+#
+# Follow-up to docs/decisions.md D26. MedQuad's shallow-layer signal
+# (~0.83-0.87 AUC already at layer 0, corr(layer, AUC) ~0.02-0.18) survived
+# exp_06's length-shortcut audit (word/char length only reach ~0.56-0.59).
+# This experiment tests a SECOND, more specific candidate shortcut before
+# treating the layer-0 signal as evidence of genuine fine-grained model
+# "knowledge": is it explainable by coarse question-type / template
+# bucketing (H_A) instead of a real per-topic distinction (H_C)?
+#
+# Pure CPU, no GPU, no new activation extraction — reuses
+# core.data.load_generated_labels (already has question + hard_label, per
+# exp_06/run_03's usage pattern) and, if available, core.data's raw MedQuad
+# loader for the question_type field. Same script shape as
+# exp_06/run_03_shallow_shortcut_audit.py — intentionally not reinventing
+# that pattern (project plan §2.5).
+
+experiment_name: "exp_07_medquad_shallow_signal_probe"
+description: >
+  Tests whether MedQuad's real (non-length-explained) shallow-layer AUC
+  (~0.83-0.87, see docs/decisions.md D26 point 3) is explainable by
+  coarse question-type / template-keyword bucketing (H_A) or requires
+  finer-grained signal not captured by these cheap categorical/keyword
+  features (H_C). Falsifiable prediction for H_A: question_type /
+  keyword-bucket AUC should approach 0.83-0.87. For H_C: it should stay
+  well below that, closer to the ~0.56-0.59 length-only ceiling from
+  exp_06/run_03.
+
+coarse_scan_output_dir: "experiments/exp_02_coarse_scan/results"
+reference_real_signal_auc_range: [0.83, 0.87]  # from D26 pt.3, for the
+                                                 # human reading the output
+                                                 # to compare against — not
+                                                 # used in any computation
+
+# How many raw examples to pull when looking up question_type by
+# example_id (must cover the full ~1000 MedQuad examples from the coarse
+# scan per D14 with margin; if this comes back short, the log will say so
+# explicitly rather than silently working with a partial set).
+n_examples_for_question_type_lookup: 1500
+
+# Curated keyword buckets operationalizing "template category" WITHOUT
+# depending on question_type being present in core.data's schema — these
+# are substrings of the MedQuAD question text itself, chosen from the
+# dataset's known common templates ("What is (are) X ?", "What are the
+# symptoms of X ?", "What causes X ?", "How to prevent X ?", "What are the
+# treatments for X ?", "Is X inherited ?", "How many people are affected by
+# X ?"). Each example gets a one-hot-ish set of binary features (multiple
+# can fire, e.g. combined phrasing).
+keyword_buckets:
+  symptoms: ["symptom"]
+  causes: ["cause", "causes"]
+  treatment: ["treatment", "treat "]
+  prevention: ["prevent"]
+  genetics: ["inherit", "genetic", "gene "]
+  prevalence: ["how many people", "affected"]
+  diagnosis: ["test", "diagnos", "exam"]
+  definition: ["what is", "what are"]
+  susceptibility: ["who is at risk", "risk factor", "susceptib"]
+  outlook: ["outlook", "prognosis"]
+
+n_splits: 5
+n_seeds: 10
+base_seed: 0
+
+output_dir: "experiments/exp_07_medquad_shallow_signal_probe/results"

@@ -257,4 +257,36 @@ attention层0:0.813 vs 0.850,p=0.0002),有的层front50显著高于pregen
 泛化到GSM8K,并针对数学题额外加了"问题里数字个数/最大数字"这两个候选捷
 径特征,已用构造数据验证检出逻辑正确。
 
+### D26 — exp_06订正结果:TruthfulQA的posthoc"深度依赖"撤回,MedQuad浅层饱和排除长度捷径,GSM8K呈非单调模式
+2026-08-19。`exp_06_depth_correlation_recheck`全量结果(corrected_depth_results.csv,
+depth_correlation_comparison.csv,shallow_shortcut_audit.json)核对完毕:
+1. CoQA(0.885/0.434)、TriviaQA(0.805/0.664)的深度依赖模式完整保留,订正
+   前后基本不变。
+2. **TruthfulQA的posthoc"深度依赖"成员资格被撤回**:相关系数从订正前0.793
+   跌到订正后-0.038,和D18里TruthfulQA/MedQuad最早被识别为纯artifact性质
+   一致——这次是posthoc"深度依赖"分组本身的假象,不是新发现,是旧问题的
+   延伸清理。
+3. **MedQuad浅层饱和确认为真实效应,非长度捷径**:pregen/posthoc相关系数
+   均在0.02-0.18,run_03捷径审计显示word/char length的AUC只有0.54-0.59,
+   远低于真实的0.83-0.87,长度解释(D21的泛化检验)被排除。
+4. **GSM8K是先升后降的非单调模式,不是单纯"深度不敏感"**:layer0~0.60,
+   layer12峰值~0.68,layer31回落到~0.63,线性相关系数(0.21/0.40)因此被
+   低估,不能直接读作"和MedQuad一样浅层饱和"。同时捷径审计显示GSM8K
+   layer0的AUC(0.591-0.606)和"文本长度+数字个数"捷径合并特征的AUC
+   (0.599,CI[0.590,0.608])统计上无法区分,但layer12峰值明显超出这个
+   捷径天花板——浅层可能主要是捷径,深层有真信号在往上加。
+5. （附带发现,零成本从上述CSV直接算出,未做新实验）layer0起点AUC和后续
+   深度增益之间存在中等强度负相关(raw空间-0.667,logit空间-0.570,
+   n=10个数据集×stage点,MedQuad和TriviaQA-pregen是两个主导相关性的极
+   端点)——"有没有空间涨"这个更简约的统一解释值得记录,但样本点太少、
+   被两个极端值主导,暂不单独立项验证,留待后续有更多数据集/stage点时
+   再检验是否稳健。
+
+**决定**:阶段3聚焦MedQuad的浅层饱和现象(第3点)作为最干净、最站得住的
+候选现象,新增`exp_07_medquad_shallow_signal_probe`去区分"这个浅层信号
+到底是粗粒度的问题类型/模板分桶,还是更细粒度、无法用简单表层特征复现
+的东西"。GSM8K的先升后降模式(第4点)记录在案,暂不单独立项——它不像
+MedQuad那样干净,且GSM8K本身已经确认有真实的深层信号增量,不是这一轮
+"哪个现象最值得深挖"的优先候选。
+
 <!-- New entries go below this line. -->
